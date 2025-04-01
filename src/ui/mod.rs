@@ -36,7 +36,8 @@ pub struct App<'a> {
     pub command_input: String,
     pub mode: AppMode,
     pub status_message: String,
-    pub scroll_offset: u16,
+    pub scroll_offset: u16,      // Scroll para el contenido del capítulo
+    pub toc_scroll_offset: u16,  // Scroll exclusivo para la tabla de contenidos
     pub should_quit: bool,
     pub show_metadata: bool,
     pub show_toc: bool,
@@ -53,6 +54,7 @@ impl<'a> App<'a> {
             mode: AppMode::Normal,
             status_message: String::new(),
             scroll_offset: 0,
+            toc_scroll_offset: 0,
             should_quit: false,
             show_metadata: false,
             show_toc: false,
@@ -154,6 +156,7 @@ impl<'a> App<'a> {
             ["t"] | ["toc"] => {
                 self.show_toc = true;
                 self.show_metadata = false;
+                self.toc_scroll_offset = 0; // Reiniciar scroll de TOC al entrar
             }
             ["m"] | ["meta"] => {
                 self.show_metadata = true;
@@ -174,55 +177,65 @@ impl<'a> App<'a> {
     // Maneja eventos de teclado
     pub fn handle_key_event(&mut self, key: KeyCode, modifiers: KeyModifiers) {
         match self.mode {
-            AppMode::Normal => match key {
-                KeyCode::Char('j') => {
-                    // Scroll hacia abajo (como en vim)
-                    self.scroll_offset = self.scroll_offset.saturating_add(1);
+            AppMode::Normal => {
+                if self.show_toc {
+                    // Manejo específico para la tabla de contenidos
+                    match key {
+                        KeyCode::Char('j') => {
+                            self.toc_scroll_offset = self.toc_scroll_offset.saturating_add(1);
+                        }
+                        KeyCode::Char('k') => {
+                            self.toc_scroll_offset = self.toc_scroll_offset.saturating_sub(1);
+                        }
+                        KeyCode::Esc => {
+                            self.show_toc = false;
+                            self.toc_scroll_offset = 0;
+                        }
+                        _ => {}
+                    }
+                } else {
+                    // Manejo para el contenido del capítulo
+                    match key {
+                        KeyCode::Char('j') => {
+                            self.scroll_offset = self.scroll_offset.saturating_add(1);
+                        }
+                        KeyCode::Char('k') => {
+                            self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                        }
+                        KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.scroll_offset = self.scroll_offset.saturating_add(10);
+                        }
+                        KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.scroll_offset = self.scroll_offset.saturating_sub(10);
+                        }
+                        KeyCode::Char('g') if modifiers.contains(KeyModifiers::SHIFT) => {
+                            self.scroll_offset = u16::MAX; // Ir al final del texto
+                        }
+                        KeyCode::Char('g') => {
+                            self.scroll_offset = 0; // Ir al inicio del texto
+                        }
+                        KeyCode::Char('n') => {
+                            self.next_chapter();
+                        }
+                        KeyCode::Char('p') => {
+                            self.prev_chapter();
+                        }
+                        KeyCode::Char(':') => {
+                            self.mode = AppMode::Command;
+                            self.command_input.clear();
+                        }
+                        KeyCode::Char('q') => {
+                            self.should_quit = true;
+                        }
+                        KeyCode::Esc => {
+                            // Salir de vistas especiales (TOC o metadata)
+                            self.show_toc = false;
+                            self.show_metadata = false;
+                        }
+                        _ => {}
+                    }
                 }
-                KeyCode::Char('k') => {
-                    // Scroll hacia arriba (como en vim)
-                    self.scroll_offset = self.scroll_offset.saturating_sub(1);
-                }
-                KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    // Scroll media página hacia abajo (como en vim)
-                    self.scroll_offset = self.scroll_offset.saturating_add(10);
-                }
-                KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    // Scroll media página hacia arriba (como en vim)
-                    self.scroll_offset = self.scroll_offset.saturating_sub(10);
-                }
-                KeyCode::Char('g') if modifiers.contains(KeyModifiers::SHIFT) => {
-                    // Ir al final del texto (como en vim)
-                    self.scroll_offset = u16::MAX; // Esto se ajustará en la renderización
-                }
-                KeyCode::Char('g') => {
-                    // Ir al inicio del texto (como en vim)
-                    self.scroll_offset = 0;
-                }
-                KeyCode::Char('n') => {
-                    // Siguiente capítulo
-                    self.next_chapter();
-                }
-                KeyCode::Char('p') => {
-                    // Capítulo anterior
-                    self.prev_chapter();
-                }
-                KeyCode::Char(':') => {
-                    // Entrar en modo comando
-                    self.mode = AppMode::Command;
-                    self.command_input.clear();
-                }
-                KeyCode::Char('q') => {
-                    // Salir
-                    self.should_quit = true;
-                }
-                KeyCode::Esc => {
-                    // Volver a la vista principal si estamos en TOC o metadata
-                    self.show_toc = false;
-                    self.show_metadata = false;
-                }
-                _ => {}
-            },
+            }
             AppMode::Command => match key {
                 KeyCode::Enter => {
                     self.process_command();
@@ -317,8 +330,26 @@ fn render_content<B: Backend>(f: &mut Frame<'_>, area: Rect, app: &App) {
     // Justificar el texto para que se ajuste al ancho del área
     let width = area.width as usize;
     let justified_text = justify_text(&app.current_content, width);
+    
+    // Convertir el Text a un vector de Lines para poder modificar el estilo de la línea actual
+    let mut lines = justified_text.lines.clone();
+    
+    // Calcular la altura visible del área de contenido
+    let visible_height = area.height as usize;
+    
+    // Calcular la línea que debe estar en el centro de la pantalla
+    let middle_line_idx = visible_height / 2;
+    
+    // Siempre resaltar la línea del medio de la pantalla visible
+    if let Some(middle_line) = lines.get_mut(app.scroll_offset as usize + middle_line_idx) {
+        // Resaltar la línea central con un fondo gris oscuro
+        let spans = middle_line.spans.clone();
+        *middle_line = Line::from(spans).style(Style::default().bg(Color::Rgb(40, 40, 40)));
+    }
+    
+    let highlighted_text = Text::from(lines);
 
-    let text_widget = Paragraph::new(justified_text)
+    let text_widget = Paragraph::new(highlighted_text)
         .block(Block::default().borders(Borders::NONE))
         .scroll((app.scroll_offset, 0))
         .wrap(Wrap { trim: true });
@@ -342,7 +373,8 @@ fn render_toc<B: Backend>(f: &mut Frame<'_>, area: Rect, app: &App) {
 
     let toc_widget = Paragraph::new(toc_text)
         .block(Block::default().borders(Borders::NONE))
-        .scroll((app.scroll_offset, 0))
+        // Usar el offset específico para la TOC
+        .scroll((app.toc_scroll_offset, 0))
         .wrap(Wrap { trim: true });
 
     f.render_widget(toc_widget, area);

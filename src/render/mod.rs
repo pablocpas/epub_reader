@@ -7,7 +7,6 @@ pub fn render_xhtml_to_text(xhtml_content: &str) -> String {
     let document = Html::parse_document(xhtml_content);
     let mut output = String::new();
     // Procesamos el body, o todo el documento si no hay body
-    // src/render/mod.rs line ~10-12
     let body_selector = Selector::parse("body").unwrap();
     // Select the body element if it exists, otherwise use the document's root element
     let root_node = document.select(&body_selector).next().unwrap_or_else(|| document.root_element());
@@ -42,7 +41,7 @@ fn process_node(node: ElementRef, output: &mut String, depth: usize) {
                 // Reemplaza múltiples espacios/saltos de línea dentro del texto con uno solo
                 let cleaned_text = text.text.split_whitespace().collect::<Vec<_>>().join(" ");
                 if !cleaned_text.is_empty() {
-                     write!(output, "{}", cleaned_text).ok();
+                    write!(output, "{}", cleaned_text).ok();
                 }
             }
             Node::Element(element) => {
@@ -53,7 +52,7 @@ fn process_node(node: ElementRef, output: &mut String, depth: usize) {
 
                 // Añadir salto de línea antes de elementos de bloque si no estamos al principio
                 if needs_leading_newline && !output.is_empty() && !output.ends_with('\n') {
-                     writeln!(output).ok();
+                    writeln!(output).ok();
                 }
 
                 // Procesamiento específico por etiqueta
@@ -104,18 +103,18 @@ fn process_node(node: ElementRef, output: &mut String, depth: usize) {
                     }
                 }
 
-                 // Añadir salto de línea después de elementos de bloque
+                // Añadir salto de línea después de elementos de bloque
                 if needs_trailing_newline {
-                     // Asegúrate de que no haya ya un salto de línea
+                    // Asegúrate de que no haya ya un salto de línea
                     if !output.ends_with('\n') {
-                         writeln!(output).ok();
+                        writeln!(output).ok();
                     }
-                     // Añadir un salto extra después de párrafos para mejor separación
+                    // Añadir un salto extra después de párrafos para mejor separación
                     if tag_name == "p" && !output.ends_with("\n\n") {
-                         writeln!(output).ok();
+                        writeln!(output).ok();
                     }
                 } else if is_block && !tag_name.is_empty() {
-                     // Añade un espacio después de elementos en línea si no son seguidos por puntuación o espacio
+                    // Añade un espacio después de elementos en línea si no son seguidos por puntuación o espacio
                     if !output.ends_with(char::is_whitespace) && !output.ends_with(|c: char| c.is_ascii_punctuation()) {
                         write!(output," ").ok();
                     }
