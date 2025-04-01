@@ -26,8 +26,7 @@ pub enum EpubError {
     #[allow(dead_code)]
     OpfNotFound(String),
 
-    
-    ncontrar el elemento 'package' en el archivo OPF")]
+    #[error("No se pudo encontrar el elemento 'package' en el archivo OPF")]
     MissingPackageElement,
 
     #[error("No se pudo encontrar el elemento 'manifest' en el archivo OPF")]
