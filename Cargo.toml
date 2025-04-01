@@ -1,0 +1,15 @@
+[package]
+name = "epub_reader"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zip = "0.6"
+roxmltree = "0.18"
+scraper = "0.18"
+thiserror = "1.0"
+ego-tree = "0.7"
+ratatui = "0.26.1"
+crossterm = "0.27.0"
+unicode-width = "0.1.11"
+textwrap = { version = "0.16.0", features = ["terminal_size"] }
